@@ -24,17 +24,35 @@ var DevtoolsTelemetry = function() {
 
   self.init = function(callback) {
     self.Telemetry.init(function() {
-      self.versions = self.Telemetry.versions();
 
-      // console.log(self.versions);
+      // elimininate bogus versions like 'UNKNOWN/10000'
+      self.versions = _.filter(self.Telemetry.versions(), function(version) {
+        var split = version.split('/');
+        var _n = parseInt(split[1]);
+        if (/aurora|beta|nightly/.test(split[0]) && 
+          _n >= 32 && _n <=100) {
+          return true;
+        }
+      });
       self._version_range = self.getVersionRange();
       self.buildWindows = self.generateBuildWindows();
-      callback(true);
+      self.genMap(function(err, result) {
+        if (err) throw err;
+        self.map = _.groupBy(result, 'version');
+        console.log(self.map);
+        // debugger;
+        callback();
+      });
     });
   };
 
+  self.start = function(n) {
+    self._startNightly = n;
+  }
+
   self.generateBuildWindows = function() {
-    var startNightly = _.first(self._version_range);
+    // console.log("nightly", this._startNightly);
+    var startNightly = this._startNightly || _.first(self._version_range);
     var endNightly = _.last(self._version_range);
     var diff = (endNightly - startNightly)+1;
     var versions =  _.map(_.range(diff), function(i) {
@@ -70,40 +88,43 @@ var DevtoolsTelemetry = function() {
     });
   };
 
+  self.genMap = function(callback) {
+    var functions = _.map(self.versions, function(version) {
+      return function(callback) {
+        self.Telemetry.measures(version, function(measures) {
+          var probe_names = Object.keys(measures);
+          var devtools_keys = probe_names.filter(function(name) {
+            return (name.indexOf('DEVTOOLS_') !== -1);
+          });
 
-  // a map of all the measures, by tool
-  self.map = { devtools: {} };
-
-  // generate a model of the tools measures
-  self.generateModel = function(version, callback) {
-    self.Telemetry.measures(version, function(measures) {
-      var probe_names = Object.keys(measures);
-
-      var devtools_keys = probe_names.filter(function(name) {
-        return (name.indexOf('DEVTOOLS_') !== -1);
-      });
-
-      var _measures = {};
-      _.each(devtools_keys, function(key) {
-        _measures[key] = measures[key];
-
-        var parts = key.split('_', 2); var tool = parts[1].toLoweCase();
-        if (!self.map.devtools[tool]) {
-          self.map.devtools[tool] = [];
-        }
-        measure.name = name;
-        self.map.devtools[tool].push(measure);
-      });
-      callback(self.map);
+          var map = _.groupBy(_.map(devtools_keys, function(key) {
+            var parts = key.split('_');
+            var tool = parts[1].toLowerCase();
+            console.log(_.last(parts), key);
+            var type;
+            var _last = _.last(parts);
+            if (_last === 'FLAG') {
+              type = 'per_user';
+            }
+            else if (_last === 'BOOLEAN') {
+              type = 'boolean';
+            } else if (_last === 'SECONDS') {
+              type = 'active';
+            }
+            else { type = _last.toLowerCase(); }
+            
+            return {tool: tool, measure: key, type: type};
+          }), 'tool');
+          callback(null, {version: version, measures: map});
+        });
+      }
     });
-  };
 
-  self._latestVersionMap = {
-    release: "27",
-    beta: "28",
-    aurora: "29",
-    nightly: "30"
-  };
+    async.parallel(functions, function(err, result) {
+      if (err) throw err;
+      callback(null, result);
+    });
+  }
 
   self.getMeasuresByChannel = function(measureName, channel, versions, callback) {
     var length = versions.length, results = [], count = 0;
@@ -166,64 +187,6 @@ var DevtoolsTelemetry = function() {
     return false;
   }
 
-  self.Toolmap = {
-    'Toolbox': {
-      'time': 'DEVTOOLS_TOOLBOX_TIME_ACTIVE_SECONDS'
-    },
-    'Inspector': {
-      'flag': 'DEVTOOLS_INSPECTOR_OPENED_PER_USER_FLAG',
-      'time': 'DEVTOOLS_INSPECTOR_TIME_ACTIVE_SECONDS',
-      'bool': 'DEVTOOLS_INSPECTOR_OPENED_BOOLEAN'
-    },
-    'Web Console': {
-      'flag': 'DEVTOOLS_WEBCONSOLE_OPENED_PER_USER_FLAG',
-      'time': 'DEVTOOLS_WEBCONSOLE_TIME_ACTIVE_SECONDS',
-      'bool': 'DEVTOOLS_WEBCONSOLE_OPENED_BOOLEAN'
-    },
-    'Net Monitor': {
-      'flag': 'DEVTOOLS_NETMONITOR_OPENED_PER_USER_FLAG',
-      'time': 'DEVTOOLS_NETMONITOR_TIME_ACTIVE_SECONDS',
-      'bool': 'DEVTOOLS_NETMONITOR_OPENED_BOOLEAN'
-    },
-    'Responsive Design': {
-      'flag': 'DEVTOOLS_RESPONSIVE_OPENED_PER_USER_FLAG',
-      'time': 'DEVTOOLS_RESPONSIVE_TIME_ACTIVE_SECONDS',
-      'bool': 'DEVTOOLS_RESPONSIVE_OPENED_BOOLEAN'
-    },
-    'Style Editor': {
-      'flag': 'DEVTOOLS_STYLEEDITOR_OPENED_PER_USER_FLAG',
-      'time': 'DEVTOOLS_STYLEEDITOR_TIME_ACTIVE_SECONDS',
-      'bool': 'DEVTOOLS_STYLEEDITOR_OPENED_BOOLEAN'
-    },
-    'Debugger': {
-      'flag': 'DEVTOOLS_JSDEBUGGER_OPENED_PER_USER_FLAG',
-      'time': 'DEVTOOLS_JSDEBUGGER_TIME_ACTIVE_SECONDS',
-      'bool': 'DEVTOOLS_JSDEBUGGER_OPENED_BOOLEAN'
-    },
-    'Tilt': {
-      'flag': 'DEVTOOLS_TILT_OPENED_PER_USER_FLAG',
-      'time': 'DEVTOOLS_TILT_TIME_ACTIVE_SECONDS',
-      'bool': 'DEVTOOLS_TILT_OPENED_BOOLEAN'
-    },
-    'Profiler': {
-      'flag': 'DEVTOOLS_JSPROFILER_OPENED_PER_USER_FLAG',
-      'time': 'DEVTOOLS_JSPROFILER_TIME_ACTIVE_SECONDS',
-      'bool': 'DEVTOOLS_JSPROFILER_OPENED_BOOLEAN'
-    },
-    'Paint Flashing': {
-      'flag': 'DEVTOOLS_PAINTFLASHING_OPENED_PER_USER_FLAG',
-      'time': 'DEVTOOLS_PAINTFLASHING_TIME_ACTIVE_SECONDS',
-      'bool': 'DEVTOOLS_PAINTFLASHING_OPENED_BOOLEAN'
-    },
-    'Scratchpad': {
-      'flag': 'DEVTOOLS_SCRATCHPAD_OPENED_PER_USER_FLAG',
-      'time': 'DEVTOOLS_SCRATCHPAD_TIME_ACTIVE_SECONDS',
-      'bool': 'DEVTOOLS_SCRATCHPAD_OPENED_BOOLEAN'
-    }
-  };
-
-  self.Toolnames = _.keys(self.Toolmap);
-
   self.getBucketsForTool = function(measure, version, ranges, callback) {
     var results = _.map(_.range(ranges.length), function() { return 0; });
     var subs = 0;
@@ -247,7 +210,7 @@ var DevtoolsTelemetry = function() {
   self.getVersionRange = function() {
     return _.compact(_.unique(_.map(self.versions, function(v) {
       var _v = parseInt(v.split('/').pop(), 10);
-      if(/^[\d]+$/.test(_v) && _v >= 24 && _v <= 50) {
+      if (_v !== NaN) {
         return _v;
       }
     }))).sort();
@@ -296,7 +259,7 @@ var DevtoolsTelemetry = function() {
       var flat_results = _.flatten(results);
       var dateGroups = {};
       var tplObject = _.object(_.pluck(self.ranges, 'desc'), [0, 0]);
-      console.log(flat_results.length);
+      // console.log(flat_results.length);
       _.each(self.ranges, function(r) {
         _.each(flat_results, function(result) {
           if (self.isInRange(r, result.start, result.end) && result.count > 0) {
@@ -322,32 +285,35 @@ var DevtoolsTelemetry = function() {
     });
   };
 
-  self._getFunctionsFromWindows = function(toolName) {
+  self._getFunctionsFromWindows = function(toolName, type) {
     var functions = _.map(self.buildWindows, function(win) {
       var outer = _.map(win, function(version, channel) {
-        var measures = self.Toolmap[toolName];
+        var measures = self.map[version][0]['measures'][toolName];
+        // console.log(measures);
         var inner = _.map(measures, function(m) {
-          return function(callback) {
-            self.Telemetry.loadEvolutionOverTime(version, m, function(evolution) {
-              var mapped = evolution.map(function (date, histogram, index) {
-                var _strDate = formatDate(date);
-                return histogram.map(function(count, start, end, index) {
-                  return {
-                    strDate: _strDate,
-                    count: count,
-                    start: start,
-                    end: end,
-                    index: index,
-                    date: date,
-                    measure: m,
-                    channel: channel
-                  };
+          if (m.type === type) {
+            return function(callback) {
+              self.Telemetry.loadEvolutionOverTime(version, m.measure, function(evolution) {
+                var mapped = evolution.map(function (date, histogram, index) {
+                  var _strDate = formatDate(date);
+                  return histogram.map(function(count, start, end, index) {
+                    return {
+                      strDate: _strDate,
+                      count: count,
+                      start: start,
+                      end: end,
+                      index: index,
+                      date: date,
+                      measure: m,
+                      channel: channel
+                    };
+                  });
                 });
+                // console.log(mapped);
+                callback(null, {measure: m.measure, data: mapped});
               });
-              // console.log(mapped);
-              callback(null, mapped);
-            });
-          };
+            };
+          }
         });
         return inner;
       });
@@ -356,15 +322,15 @@ var DevtoolsTelemetry = function() {
     return _.flatten(functions);
   };
 
-  self.getWeeklyToolUsage = function(toolName, callback) {
+  self.getWeeklyToolUsage = function(toolName, type, callback) {
     var collected = {};
     // in this case 'window' is an array with telemetry-friendly version strings eg aurora/29
     // loop through the windows
-    var functions = self._getFunctionsFromWindows(toolName);
+    var functions = self._getFunctionsFromWindows(toolName, type);
 
     async.parallel(functions, function(err, results) {
       if (err) throw err;
-
+      debugger;
       var flat_results = _.flatten(results);
       var dateGroups = {};
       _.each(flat_results, function(result) {
@@ -426,10 +392,12 @@ var DevtoolsTelemetry = function() {
   };
 
   self.getWeeklyChannelUsage = function(toolName, callback) {
-    var functions = self._getFunctionsFromWindows(toolName);
+    var functions = self._getFunctionsFromWindows(toolName, 'active');
     // do stuff
     async.parallel(functions, function(err, results) {
       if (err) throw err;
+
+      console.log(results);
 
       var flat_results = _.flatten(results);
       var dateGroups = {};

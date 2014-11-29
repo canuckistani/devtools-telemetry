@@ -13,11 +13,14 @@
     "colors": "^1.0.3",
     "moment": "^2.8.4",
     "telemetry-js-node": "^1.0.0",
+    "traceback": "^0.3.1",
     "underscore": "^1.7.0"
   },
   "devDependencies": {
     "chai": "^1.10.0",
+    "gulp": "^3.8.10",
     "gulp-mocha": "^2.0.0",
+    "log-plus": "file:../../../node/log-plus",
     "mocha": "^2.0.1"
   }
 }

@@ -10,7 +10,10 @@ describe('devtools init', function() {
     // var dd = new DevtoolsTelemetry();
     dd.init(function(r) {
       // assert(r);
-      assert.equal(r, true)
+      // assert.equal(r, true);
+
+      // console.log(dd);
+      // assert.typeOf(dd.map, 'array');
       done();
     });
   });
@@ -18,11 +21,10 @@ describe('devtools init', function() {
 
 describe('devtools weekly channel usage', function() {
   it('test we get some usage', function(done) {
+    dd.start(34);
     dd.init(function(r) {
-      var start = 34, end = _.last(dd.getVersionRange());
-      var windows = dd.generateBuildWindows(start, end)
-      dd.getWeeklyChannelUsage(windows, 'Toolbox', function(result) {
-        // console.log(result);
+      dd.getWeeklyChannelUsage('toolbox', function(result) {
+        console.log(result);
         assert.typeOf(result.beta, 'array');
         assert.typeOf(result.beta[0], 'object');
         done();
@@ -31,12 +33,11 @@ describe('devtools weekly channel usage', function() {
   });
 });
 
-describe('devtools ', function() {
+describe('devtools weekly tool usage', function() {
   it('test', function(done) {
+    dd.start(34);
     dd.init(function(r) {
-      var start = 34, end = _.last(dd.getVersionRange());
-      var windows = dd.generateBuildWindows(start, end)
-      dd.getWeeklyToolUsage(windows, 'Toolbox', function(result) {
+      dd.getWeeklyToolUsage('toolbox', function(result) {
         // console.log(result);
         var keys = _.keys(result);
         assert.equal(keys[0], 'More than 5 minutes');
